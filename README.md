@@ -160,12 +160,12 @@ end;
 Результат сравнения точности на всем диапазоне чисел:
 | Parser                              | Regular Numbers Fails    | Long Numbers Fails        | Read/Write Double Fails  | Result |
 |-------------------------------------|--------------------------|---------------------------|--------------------------|--------|
-| Pure Parse Float (x86/x64)          | 0.033%                   | 0.013%                    | 0.016%                   | OK     |
+| PureParseFloat (x86/x64)            | 0.033%                   | 0.013%                    | 0.016%                   | OK     |
+| Delphi StrToFloat (x86)             | 0.033%                   | 0.102%                    | 0.010%                   | OK     | 
+| Delphi StrToFloat (x64)             | 39.106% / (7.872% >1ULP) | 71.897% / (47.451% >1ULP) | 31.434% / (0.934% >1ULP) | FAIL   |
 | FreePascal StrToFloat (x64)         | 0.067%                   | 0.062%                    | 0.021%                   | OK     |
 | Microsoft strtod (MSVCRT.DLL) (x86) | 0.987% / (0.407% >1ULP)  | 0.326% / (0.111% >1ULP)   | 0.018%                   | FAIL   |
 | Microsoft strtod (MSVCRT.DLL) (x64) | 0.987% / (0.407% >1ULP)  | 0.326% / (0.111% >1ULP)   | 0.018%                   | FAIL   |
-| Delphi StrToFloat (x86)             | 0.033%                   | 0.102%                    | 0.010%                   | OK     | 
-| Delphi StrToFloat (x64)             | 39.106% / (7.872% >1ULP) | 71.897% / (47.451% >1ULP) | 31.434% / (0.934% >1ULP) | FAIL   |
 
 В качестве референса взяты результаты преобразования **netlib dtoa.c**, в которой, предположительно, уже "отловлены" большинство ошибок.  
 Как видно из таблицы - x64 Delphi StrToFloat работает намного хуже, чем x86 версия, из-за упомянутого выше "округления" double, в x86 же вычисления присходят в более точном extended.  
@@ -177,13 +177,13 @@ end;
 
 | Parser                        | Time (x86) | Time (x64) | 
 |-------------------------------|------------|------------| 
+| PureParseFloat (Delphi)       | 7058ms     | 2929ms     |  
+| PureParseFloat (FreePascal)   |            | 2996ms     | 
+| PureParseFloat (C, TDM-GCC)   | 15866ms(!) | 1992ms     | 
 | Netlib strtod                 | 1656ms     | 1226ms     | 
 | Delphi TextToFloat            | 692ms      | 1842ms     | 
 | FreePascal TextToFloat        |            | 1685ms     | 
 | Microsoft strtod              | 5488ms     | 3808ms     | 
-| Delphi ParseFloat             | 7058ms     | 2929ms     |  
-| FreePascal ParseFloat         |            | 2996ms     | 
-| ParseFloat C Version          | 15866ms    | 1992ms     | 
 
 Как можно видеть из таблицы - лидера по скорости нет, в зависимости от компилятора и разрядности получаются разные результаты.  
 В целом ParseFloat имеет среднюю скорость, кроме аномально низкой скорости C версии, на x86, с компилятором GCC, вероятно причиной этому является активированая опция ```-ffloat-store```, без которй GCC [порождает неверный код](https://lemire.me/blog/2020/06/26/gcc-not-nearest/).  
