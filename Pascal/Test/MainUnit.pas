@@ -864,7 +864,11 @@ begin
       Writeln('Bad -dll param!');
       exit;
     end;
+    {$IFDEF FPC}
+    dll_pure_parse_float_library := LoadLibrary(PAnsiChar(AnsiString(DllName)));
+    {$ELSE}
     dll_pure_parse_float_library := LoadLibrary(PWideChar(DllName));
+    {$ENDIF}
     if pure_parse_float_library = 0 then
     begin
       Writeln('Can''t open "' + DllName + '" dll!');
@@ -882,7 +886,11 @@ begin
       Writeln('Bad -function param!');
       exit;
     end;
+    {$IFDEF FPC}
+    @dll_pure_parse_float := GetProcAddress(dll_pure_parse_float_library, PAnsiChar(AnsiString(DllFunctionName)));
+    {$ELSE}
     @dll_pure_parse_float := GetProcAddress(dll_pure_parse_float_library, PWideChar(DllFunctionName));
+    {$ENDIF}
     if @dll_pure_parse_float = nil then
     begin
       Writeln('Can''t load function "' + DllFunctionName + '" from dll!');
