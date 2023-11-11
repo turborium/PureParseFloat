@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include "../pure_parse_float/pure_parse_float.h"
+#include "..\pure_parse_float\pure_parse_float.h"
 
 uint32_t test_rand_seed = 0;
 
@@ -58,7 +58,6 @@ int main(int argc, char *argv[])
 
         // reading count
         if (a_end != b_end) {
-            printf("different reading count: source %.15lg actual %d expected %d\n", source.value, a_end-buffer, b_end-buffer);
             fatal_error_count++;
             continue;
         }
@@ -66,7 +65,6 @@ int main(int argc, char *argv[])
         // ulp fail
         if (a.bin != b.bin) {
             if ((a.bin + 1 != b.bin) && (a.bin - 1 != b.bin)) {
-                printf("ulp fail: source %.15lg actual %.15lg expected %.15lg\n", source.value, a.value, b.value);
                 fatal_error_count++;
                 continue;         
             }

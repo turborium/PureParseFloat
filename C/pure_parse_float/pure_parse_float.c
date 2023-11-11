@@ -386,8 +386,8 @@ int read_text_to_fixed_decimal(fixed_decimal *decimal, const char *text, char **
     // read mantissa
     has_digit = 0;// has read any digit (0..9)
     has_point = 0;// has read decimal point
-	while (*p != '\0') {
-		switch (*p) {
+    while (*p != '\0') {
+        switch (*p) {
         case '0':
         case '1':
         case '2':
@@ -422,12 +422,12 @@ int read_text_to_fixed_decimal(fixed_decimal *decimal, const char *text, char **
                 return 1;// make
             }
             has_point = 1;
-			break;
-		default:
-			goto end_read_mantissa;
-		}
+            break;
+        default:
+            goto end_read_mantissa;
+        }
         p++;
-	} 
+    } 
 
 end_read_mantissa:
 
