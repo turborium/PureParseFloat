@@ -168,7 +168,7 @@ type
 function DoubleToDoubleDouble(Value: Double): TDoubleDouble; inline;
 begin
   Result.Hi := Value;
-  Result.Lo := 0;//Value / 1e999;//0;
+  Result.Lo := 0;
 end;
 
 // Make Double from DoubleDouble
@@ -235,7 +235,7 @@ const
 var
   Temp: Double;
 begin
- if (A > InfinitySplit) or (A < -InfinitySplit) then
+  if (A > InfinitySplit) or (A < -InfinitySplit) then
   begin
     // down
     A := A * InfinityDown;
@@ -553,7 +553,7 @@ begin
     end else
     begin
       EndText := PStartExponent;// revert
-      exit(True);// Make
+      exit(True);// make
     end;
 
     // fix
@@ -561,7 +561,7 @@ begin
   end;
 
   EndText := P;
-  exit(True);// Make
+  exit(True);// make
 end;
 
 function FixedDecimalToDouble(var Decimal: TFixedDecimal): Double;
@@ -704,14 +704,14 @@ var
   FPUSettings: TFPUSettings;
   {$ENDIF}
 begin
-  // Try read inf/nan
+  // try read inf/nan
   if ReadSpecial(Value, TextPtr, EndPtr) then
   begin
-    // Read done
+    // read done
     exit(True);
   end;
 
-  // Try read number
+  // try read number
   if ReadTextToFixedDecimal(Decimal, TextPtr, EndPtr) then
   begin
     {$IFNDEF PURE_PARSE_FLOAT_DISABLE_SET_NORMAL_FPU_SETTINGS}
@@ -725,15 +725,15 @@ begin
       RestoreFPUSettings(FPUSettings);
     end;
     {$ELSE}
-    // Convert Decimal to Double
+    // convert Decimal to Double
     Value := FixedDecimalToDouble(Decimal);
     {$ENDIF}
 
-    // Read done
+    // read done
     exit(True);
   end;
 
-  // Fail
+  // fail
   exit(False);
 end;
 
