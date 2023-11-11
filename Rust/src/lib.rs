@@ -1,12 +1,34 @@
 use std::ffi::{c_int, c_char, c_double};
 
-// Check value is +Inf or -Inf
-fn is_infinity(value: f64) -> bool {
-    value == f64::INFINITY || value == -f64::NEG_INFINITY
+// Safe wrapper for null terminated string
+#[derive(Clone)]
+struct Reader(*const u8, usize);
+
+impl Reader {
+    fn from_raw_ptr(text: *const u8) -> Self {
+        Reader(text, 0)
+    }
+
+    #[allow(dead_code)]
+    fn from_str(text: &str) -> Self {
+        Reader(text.as_ptr(), 0)
+    }
+
+    fn get(&self) -> u8 {
+        unsafe { *self.0.add(self.1) }
+    }
+
+    // before using, make sure Reader is not ended
+    fn advance(&mut self) {
+        self.1 += 1;
+    }
+
+    fn ended(&self) -> bool {
+        self.get() == 0
+    }
 }
 
 // 31 digits garantee, with (exp^10 >= -291) or (exp^2 >= -968)
-#[derive(Clone, Copy)]
 struct DoubleDouble {
     hi: f64,
     lo: f64,
@@ -21,22 +43,69 @@ impl Into<DoubleDouble> for f64 {
     }
 }
 
-impl From<DoubleDouble> for f64 {
-    fn from(value: DoubleDouble) -> Self {
-        value.hi
+impl std::ops::Add<f64> for DoubleDouble {
+    type Output = Self;
+
+    // The DWPlusFP algorithm [1]
+    fn add(self, rhs: f64) -> Self::Output {
+        let result = Self::add(self.hi, rhs);
+        Self::fast_add(result.hi, result.lo + self.lo)
+    }
+}
+
+impl std::ops::Mul<f64> for &DoubleDouble {
+    type Output = DoubleDouble;
+
+    // The "DWTimesFP1" algorithm [1]
+    fn mul(self, rhs: f64) -> Self::Output {
+        let c = DoubleDouble::mul(self.hi, rhs);
+
+        let result = DoubleDouble::fast_add(c.hi, self.lo * rhs);
+        DoubleDouble::fast_add(result.hi, result.lo + c.lo)
+    }
+}
+
+impl std::ops::MulAssign<f64> for DoubleDouble {
+    fn mul_assign(&mut self, rhs: f64) {
+        *self = &*self * rhs;
+    }
+}
+
+impl std::ops::Div<f64> for &DoubleDouble {
+    type Output = DoubleDouble;
+
+    // The "DWDivFP2" algorithm [1]
+    fn div(self, rhs: f64) -> Self::Output {
+        let hi = self.hi / rhs;
+
+        let p = DoubleDouble::mul(hi, rhs);
+
+        let dhi = self.hi - p.hi;
+        let d = DoubleDouble{
+            hi: dhi,
+            lo: dhi - p.lo,
+        };
+
+        let result = DoubleDouble{
+            hi,
+            lo: (d.lo + self.lo) / rhs,
+        };
+
+        return DoubleDouble::fast_add(result.hi, result.lo);
+    }
+}
+
+impl std::ops::DivAssign<f64> for DoubleDouble {
+    fn div_assign(&mut self, rhs: f64) {
+        *self = &*self / rhs;
     }
 }
 
 impl DoubleDouble {
-    // Add two Double1 value, condition: |A| >= |B|
+    // Add two f64 values, condition: |A| >= |B|
     // The "Fast2Sum" algorithm (Dekker 1971) [1]
-    fn fast_add11(a: f64, b: f64) -> Self {
+    fn fast_add(a: f64, b: f64) -> Self {
         let hi = a + b;
-
-        // infinity check
-        if is_infinity(hi) {
-            return hi.into();
-        }
 
         Self{
             hi,
@@ -45,138 +114,29 @@ impl DoubleDouble {
     }
 
     // The "2Sum" algorithm [1]
-    fn add11(a: f64, b: f64) -> Self {
+    fn add(a: f64, b: f64) -> Self {
         let hi = a + b;
-
-        // infinity check
-        if is_infinity(hi) {
-            return hi.into();
-        }
 
         let ah = hi - b;
         let bh = hi - ah;
 
         Self{
-            hi: hi,
+            hi,
             lo: (a - ah) + (b - bh),
         }
     }
 
-    // The "Veltkamp Split" algorithm [2] [3] [4]
-    // See "Splitting into Halflength Numbers" and ALGOL procedure "mul12" in Appendix in [2]
-    fn split1(a: f64) -> Self {
-        // The Splitter should be chosen equal to 2^trunc(t - t / 2) + 1,
-        // where t is the number of binary digits in the mantissa.
-        const SPLITTER: f64 = 134217729.0;// = 2^(53 - 53 div 2) + 1 = 2^27 + 1
-        // Just make sure we don't have an overflow for Splitter,
-        // InfinitySplit is 2^(e - (t - t div 2))
-        // where e is max exponent, t is number of binary digits.
-        const INFINITY_SPLIT: f64 = 6.69692879491417e+299;// = 2^(1023 - (53 - 53 div 2)) = 2^996
-        // just multiply by the next lower power of two to get rid of the overflow
-        // 2^(+/-)27 + 1 = 2^(+/-)28
-        const INFINITY_DOWN: f64 = 3.7252902984619140625e-09;// = 2^-(27 + 1) = 2^-28
-        const INFINITY_UP: f64 = 268435456.0;// = 2^(27 + 1) = 2^28
-
-        if a > INFINITY_SPLIT || a < -INFINITY_SPLIT {
-            // down
-            let a = a * INFINITY_DOWN;
-            // mul
-            let temp = SPLITTER * a;
-            let hi = temp + (a - temp);
-            let lo = a - hi;
-            // up
-            return Self{
-                hi: hi * INFINITY_UP,
-                lo: lo * INFINITY_UP,
-            };
-        }
-
-        let temp = SPLITTER * a;
-        let hi = temp + (a - temp);
-        Self{
-            hi: hi,
-            lo: a - hi,
-        }
-    }
-
-    // Multiplication two Double1 value
+    // Multiply two f64 values
     // The "TWO-PRODUCT" algorithm [5]
-    fn mul11(a: f64, b: f64) -> Self {
+    fn mul(a: f64, b: f64) -> Self {
         let hi = a * b;
 
-        // infinity check
-        if is_infinity(hi) {
-            return hi.into();
-        }
-
-        let a2 = Self::split1(a);
-        let b2 = Self::split1(b);
-
-        let err1 = hi - a2.hi * b2.hi;
-        let err2 = err1 - a2.lo * b2.hi;
-        let err3 = err2 - a2.hi * b2.lo;
-
         Self{
-            hi: hi,
-            lo: a2.lo * b2.lo - err3,
+            hi,
+            lo: a.mul_add(b, -hi),
         }
-    }
-
-    // Multiplication Double2 by Double1
-    // The "DWTimesFP1" algorithm [1]
-    fn mul21(a: Self, b: f64) -> Self {
-        let c = Self::mul11(a.hi, b);
-
-        // infinity check
-        if is_infinity(c.hi) {
-            return c.hi.into();
-        }
-
-        let result = Self::fast_add11(c.hi, a.lo * b);
-        Self::fast_add11(result.hi, result.lo + c.lo)
-    }
-
-    // Division Double2 by Double1
-    // The "DWDivFP2" algorithm [1]
-    fn div21(a: Self, b: f64) -> Self {
-        let hi = a.hi / b;
-
-        // infinity check
-        if is_infinity(hi) {
-            return hi.into();
-        }
-
-        let p = Self::mul11(hi, b);
-
-        let dhi = a.hi - p.hi;
-        let d = Self{
-            hi: dhi,
-            lo: dhi - p.lo,
-        };
-
-        let result = Self{
-            hi: hi,
-            lo: (d.lo + a.lo) / b,
-        };
-
-        return Self::fast_add11(result.hi, result.lo);
-    }
-
-    // Addition Double2 and Double1
-    // The DWPlusFP algorithm [1]
-    fn add21(a: Self, b: f64) -> Self {
-        let mut result = Self::add11(a.hi, b);
-
-        // infinity check
-        if is_infinity(result.hi) {
-            return result.hi.into();
-        }
-
-        result.lo = result.lo + a.lo;
-        Self::fast_add11(result.hi, result.lo)
     }
 }
-
 
 // ---
 
@@ -188,100 +148,125 @@ struct FixedDecimal {
     digits: [u8; FIXED_DECIMAL_DIGITS], // Max digits in Double value * 2
 }
 
-unsafe fn text_prefix_length(text: *const u8, prefix: *const u8) -> isize {
-    let mut i: isize = 0;
-    while {
-        let texti = *text.offset(i);
-        let prefixi = *prefix.offset(i);
-        texti == prefixi || texti >= b'A' && texti <= b'Z' && texti + 32 == prefixi
-    } {
-        if *text.offset(i) == b'\0' {
-            break;
+impl Into<f64> for &FixedDecimal {
+    fn into(self) -> f64 {
+        const LAST_ACCURACY_EXPONENT_10: isize = 22; // for Double
+        const LAST_ACCURACY_POWER_10: f64 = 1e22; // for Double
+        const MAX_SAFE_INT: f64 = 9007199254740991.0; // (2^53−1) for Double
+        const MAX_SAFE_HI: f64 = (MAX_SAFE_INT - 9.) / 10.; // for X * 10 + 9
+        const POWER_OF_10: [f64; 1+LAST_ACCURACY_EXPONENT_10 as usize] = [
+            1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
+            1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22
+        ];
+
+        let mut number: DoubleDouble = 0.0.into();
+        // set mantissa
+        for &digit in &self.digits[..self.count as usize] {
+            if number.hi <= MAX_SAFE_HI {
+                number.hi = number.hi * 10.0 + digit as f64;
+            } else {
+                number = &number * 10.0 + digit as f64;
+            }
+        };
+
+        let mut exponent = self.exponent - self.count + 1;
+        match exponent {
+        _ if exponent > 0 => {
+            while exponent > LAST_ACCURACY_EXPONENT_10 {
+                number *= LAST_ACCURACY_POWER_10; // * e22
+                // overflow break
+                if number.hi.is_infinite() {
+                    break;
+                }
+                exponent -= LAST_ACCURACY_EXPONENT_10;
+            }
+            number *= POWER_OF_10[exponent as usize]; // * eX
         }
-        i += 1;
+        _ if exponent < 0 => {
+            while exponent < -LAST_ACCURACY_EXPONENT_10 {
+                number /= LAST_ACCURACY_POWER_10; // / e22
+                // underflow break
+                if number.hi == 0.0 {
+                    break;
+                }
+                exponent += LAST_ACCURACY_EXPONENT_10;
+            }
+            number /= POWER_OF_10[-exponent as usize]; // / eX
+        }
+        _ => {}
+        }
+
+        if self.is_negative { -number.hi } else { number.hi }
     }
-    return i;
 }
 
-unsafe fn read_special(text: *const u8) -> Result<(f64, *const u8), ()> {
-    // clean
-    let mut is_negative: bool = false;
-
-    // read from start
-    let mut p: *const u8 = text;
-
-    // read sign
-    match *p {
-    b'+' => p = p.offset(1),
-    b'-' => {
-        is_negative = true;
-        p = p.offset(1);
-    },
-    _ => {},
+fn read_inf_or_nan(mut p: Reader) -> Option<(f64, usize)> {
+    fn common_prefix_length(mut text: Reader, prefix: &[u8]) -> usize {
+        let mut i: usize = 0;
+        for &c in prefix {
+            if text.ended() || text.get().to_ascii_lowercase() != c {
+                break;
+            }
+            i += 1;
+            text.advance();
+        }
+        return i;
     }
 
-    // special
-    match *p {
+    let is_negative = match p.get() {
+        b'+' => { p.advance(); false }
+        b'-' => { p.advance(); true }
+        _ => false
+    };
+
+    match p.get() {
     b'I' | b'i' => {
-        let len = text_prefix_length(p, "infinity".as_ptr());
+        let len = common_prefix_length(p.clone(), "infinity".as_bytes());
         if len == 3 || len == 8 {
-            let mut res = f64::INFINITY;
-            if is_negative {
-                res = -res;
-            }
-            return Ok((res, p.offset(len)));
+            let res = if is_negative { f64::NEG_INFINITY } else { f64::INFINITY };
+            return Some((res, p.1 + len));
         }
     }
     b'N' | b'n' => {
-        let len = text_prefix_length(p, "nan".as_ptr());
+        let len = common_prefix_length(p.clone(), "nan".as_bytes());
         if len == 3 {
-            let mut res = f64::NAN;
-            if is_negative {
-                res = -res;
-            }
-            return Ok((res, p.offset(len)));
+            let res = if is_negative { -f64::NAN } else { f64::NAN };
+            return Some((res, p.1 + len ));
         }
     }
     _ => {},
     }
 
-    Err(())
+    None
 }
 
-unsafe fn read_text_to_fixed_decimal(text: *const u8) -> Result<(FixedDecimal, *const u8), ()> {
+fn read_fixed_decimal(mut p: Reader) -> Option<(FixedDecimal, usize)> {
     const CLIP_EXPONENT: isize = 1000000;
 
-    // clean
+    // read sign
+    let is_negative = match p.get() {
+        b'+' => { p.advance(); false }
+        b'-' => { p.advance(); true },
+        _ => false,
+    };
+
     let mut decimal = FixedDecimal{
         count: 0,
         digits: [0; FIXED_DECIMAL_DIGITS],
         exponent: -1,
-        is_negative: false,
+        is_negative,
     };
-
-    // read from start
-    let mut p: *const u8 = text;
-
-    // read sign
-    match *p {
-    b'+' => p = p.offset(1),
-    b'-' => {
-        decimal.is_negative = true;
-        p = p.offset(1);
-    },
-    _ => {},
-    }
 
     // read mantissa
     let mut has_digit = false; // has read any digit (0..9)
     let mut has_point = false; // has read decimal point
-	'end_read_mantissa: while *p != b'\0' {
-		match *p {
-        b'0' | b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9' => {
-            if decimal.count != 0 || *p != b'0' {
+    'read_mantissa_loop: while !p.ended() {
+        match p.get() {
+        b'0'..=b'9' => {
+            if decimal.count != 0 || p.get() != b'0' {
                 // save digit
                 if decimal.count < FIXED_DECIMAL_DIGITS as isize {
-                    decimal.digits[decimal.count as usize] = *p - b'0';
+                    decimal.digits[decimal.count as usize] = p.get() - b'0';
                     decimal.count += 1;
                 }
                 // inc exponenta
@@ -298,132 +283,49 @@ unsafe fn read_text_to_fixed_decimal(text: *const u8) -> Result<(FixedDecimal, *
         },
         b'.' => {
             if has_point {
-                return Ok((decimal, p)); // make
+                return Some((decimal, p.1));
             }
             has_point = true;
         },
         _ => {
-			break 'end_read_mantissa;
+            break 'read_mantissa_loop;
         },
-		}
-        p = p.offset(1);
-	}
+        }
+        p.advance();
+    }
 
     if !has_digit {
-        return Err(());
+        return None;
     }
 
     // read exponenta
-    if *p == b'e' || *p == b'E' {
-        let p_start_exponent = p;
-        p = p.offset(1);
+    if matches!(p.get(), b'e' | b'E') {
+        let p_start_exponent = p.1;
+        p.advance();
 
         let mut exponent: isize = 0;
-        let mut exponent_sign: isize = 1;
-
-        // check sign
-        match *p {
-        b'+' => p = p.offset(1),
-        b'-' => {
-            exponent_sign = -1;
-            p = p.offset(1);
-        },
-        _ => {},
-        }
+        let exponent_sign: isize = match p.get() {
+            b'+' => { p.advance(); 1 },
+            b'-' => { p.advance(); -1 },
+            _ => 1,
+        };
 
         // read
-        if *p >= b'0' && *p <= b'9' {
-            while *p >= b'0' && *p <= b'9' {
-                exponent = exponent * 10 + (*p - b'0') as isize;
-                if exponent > CLIP_EXPONENT {
-                    exponent = CLIP_EXPONENT;
-                }
-                p = p.offset(1);
+        if matches!(p.get(), b'0'..=b'9') {
+            while matches!(p.get(), b'0'..=b'9') {
+                exponent = (exponent * 10 + (p.get() - b'0') as isize).min(CLIP_EXPONENT);
+                p.advance();
             }
         } else {
-            return Ok((decimal, p_start_exponent)); // Make
+            return Some((decimal, p_start_exponent));
         }
 
         // fix
         decimal.exponent = decimal.exponent + exponent_sign * exponent;
     }
 
-    Ok((decimal, p)) // Make
+    Some((decimal, p.1))
 }
-
-fn fixed_decimal_to_double(decimal: &FixedDecimal) -> f64 {
-    const LAST_ACCURACY_EXPONENT_10: isize = 22; // for Double
-    const LAST_ACCURACY_POWER_10: f64 = 1e22; // for Double
-    const MAX_SAFE_INT: f64 = 9007199254740991.0; // (2^53−1) for Double
-    const MAX_SAFE_HI: f64 = (MAX_SAFE_INT - 9.) / 10.; // for X * 10 + 9
-    const POWER_OF_10: [f64; 1+LAST_ACCURACY_EXPONENT_10 as usize] = [
-        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11,
-        1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20, 1e21, 1e22
-    ];
-
-    let mut result: f64;
-    let mut number: DoubleDouble;
-
-    number = 0.0.into();
-
-    // set mantissa
-    for i in 0..decimal.count as usize {
-        if number.hi <= MAX_SAFE_HI {
-            number.hi = number.hi * 10.0;
-            number.hi = number.hi + decimal.digits[i] as f64; // + Digit
-        } else {
-            number = DoubleDouble::mul21(number, 10.0); // * 10
-            number = DoubleDouble::add21(number, decimal.digits[i] as f64); // + Digit
-        }
-    };
-
-    // set exponent
-    let mut exponent = decimal.exponent - decimal.count + 1;
-
-    // positive exponent
-    while exponent > 0 {
-        if exponent > LAST_ACCURACY_EXPONENT_10 {
-            // * e22
-            number = DoubleDouble::mul21(number, LAST_ACCURACY_POWER_10);
-            // overflow break
-            if is_infinity(number.into()) {
-                break;
-            }
-            exponent = exponent - LAST_ACCURACY_EXPONENT_10;
-        } else {
-            // * eX
-            number = DoubleDouble::mul21(number, POWER_OF_10[exponent as usize]);
-            break;
-        }
-    }
-
-    // negative exponent
-    while exponent < 0 {
-        if exponent < -LAST_ACCURACY_EXPONENT_10 {
-            // / e22
-            number = DoubleDouble::div21(number, LAST_ACCURACY_POWER_10);
-            // underflow break
-            if <DoubleDouble as Into<f64>>::into(number) == 0.0 {
-                break;
-            }
-            exponent = exponent + LAST_ACCURACY_EXPONENT_10;
-        } else {
-            // / eX
-            number = DoubleDouble::div21(number, POWER_OF_10[-exponent as usize]);
-            break;
-        }
-    }
-
-    // make result
-    result = number.into();
-
-    // fix sign
-    if decimal.is_negative {
-        result = -result;
-    }
-    return result;
-}
-
 
 // -------------------------------------------------------------------------------------------------
 // ParseFloat parse chars with float point pattern to Double and stored to Value param.
@@ -467,57 +369,59 @@ fn fixed_decimal_to_double(decimal: &FixedDecimal) -> f64 {
 // Text,       TextEnd,   Value = 500,         Result = True
 //
 // -------------------------------------------------------------------------------------------------
-unsafe fn parse_float_impl(text: *const u8) -> Result<(f64, *const u8), ()> {
-    // Try read inf/nan
-    read_special(text)
-        .or_else(|_| {
-            // Try read number
-            read_text_to_fixed_decimal(text)
-                // Convert Decimal to Double
-                .map(|(decimal, text_end)|
-                    (fixed_decimal_to_double(&decimal), text_end))
-        })
+fn parse_float_impl(text: Reader) -> Option<(f64, usize)> {
+    if let res@Some(_) = read_inf_or_nan(text.clone()) {
+        return res
+    } else if let Some((decimal, count)) = read_fixed_decimal(text) {
+        Some(((&decimal).into(), count))
+    } else {
+        None
+    }
 }
 
 #[no_mangle]
 unsafe extern fn parse_float(text: *const c_char, value: *mut c_double, text_end: *mut *const c_char) -> c_int {
-    match parse_float_impl(text as *const u8) {
-    Ok((res, end)) => {
+    match parse_float_impl(Reader::from_raw_ptr(text as *const u8)) {
+    Some((res, end)) => {
         *value = res;
-        *text_end = end as *const c_char;
+        *text_end = text.add(end);
         1
-    },
-    Err(_) => {
-        0
-    },
+    }
+    None => 0
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_float_impl;
+    use crate::{parse_float_impl, Reader};
 
     #[test]
     fn pi() {
-        let (result, _) = unsafe { parse_float_impl("3.14159265".as_ptr()).unwrap() };
+        let (result, _) = parse_float_impl(Reader::from_str("3.14159265")).unwrap();
         assert_eq!(result, 3.14159265);
     }
 
     #[test]
     fn exponent() {
-        let (result, _) = unsafe { parse_float_impl("-1234e10".as_ptr()).unwrap() };
+        let (result, _) = parse_float_impl(Reader::from_str("-1234e10")).unwrap();
         assert_eq!(result, -1234e10);
     }
 
     #[test]
     fn nan() {
-        let (result, _) = unsafe { parse_float_impl("nan".as_ptr()).unwrap() };
+        let (result, _) = parse_float_impl(Reader::from_str("nan")).unwrap();
         assert!(f64::is_nan(result));
     }
 
     #[test]
     fn minus_nan() {
-        let (result, _) = unsafe { parse_float_impl("-nan".as_ptr()).unwrap() };
+        let (result, _) = parse_float_impl(Reader::from_str("-nan")).unwrap();
+        assert!(f64::is_nan(result));
+    }
+
+    #[test]
+    fn minus_nan_uppercase() {
+        let (result, _) = parse_float_impl(Reader::from_str("-NaN")).unwrap();
         assert!(f64::is_nan(result));
     }
 }
