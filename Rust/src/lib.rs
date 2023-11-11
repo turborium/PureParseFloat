@@ -2,7 +2,7 @@ use std::ffi::{c_int, c_char, c_double};
 
 // Check value is +Inf or -Inf
 fn is_infinity(value: f64) -> bool {
-    value == f64::INFINITY || value == -f64::NEG_INFINITY
+    value == f64::INFINITY || value == f64::NEG_INFINITY
 }
 
 // 31 digits garantee, with (exp^10 >= -291) or (exp^2 >= -968)

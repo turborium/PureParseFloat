@@ -316,6 +316,9 @@ begin
   AssertEqual('1.7976931348623157081e+308');
   AssertEqual('1.8145860519450699870567321328132e-5');
   AssertEqual('0.34657359027997265470861606072909');
+  // inf
+  AssertEqual('1000000000000e307');// +inf
+  AssertEqual('-1000000000000e307');// -inf
   // demo values
   AssertEqual('18014398509481993');
 end;
