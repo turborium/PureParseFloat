@@ -20,7 +20,7 @@ Check:```Test.32.exe -size medium -parser pure```
 Benchmark:```Test.32.exe -benchmark```  
 Benchmark with C version:```Test.32.exe -benchmark -c```   
 
-To check your DLL place DLL and set ```-dll``` and ```-name``` params.  
+To check your DLL place DLL and set ```-dll``` and ```-function``` params.  
 **For example:**  
 Check *rust32.dll*: ```Test.32.exe -size medium -dll rust32.dll -function parse_float```  
 Check *rust64.dll*: ```Test.64.exe -size medium -dll rust64.dll -function parse_float```  
