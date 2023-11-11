@@ -53,6 +53,8 @@ function MsvcrtWcstod(Str: PWideChar; PtrEnd: PPWideChar): Double; cdecl; extern
 var
   pure_parse_float_library: HMODULE;
   pure_parse_float: function(Str: PAnsiChar; Double: PDouble; PtrEnd: PPAnsiChar): Double; cdecl;
+  dll_pure_parse_float_library: HMODULE;
+  dll_pure_parse_float: function(Str: PAnsiChar; Double: PDouble; PtrEnd: PPAnsiChar): Double; cdecl;
 
 // from ieee_convert32.dll/ieee_convert64.dll
 function IeeeStringToDouble(Str: UnicodeString; out Value: Double): Integer;
@@ -99,6 +101,20 @@ begin
   AnsiStr := AnsiString(Str);// unicode -> ansi
 
   pure_parse_float(PAnsiChar(AnsiStr), @Value, @PEnd);
+
+  Result := PEnd - PAnsiChar(AnsiStr);
+end;
+
+// from user dll
+function PureStringToDoubleUserDll(Str: UnicodeString; out Value: Double): Integer;
+var
+  AnsiStr: AnsiString;
+  PEnd: PAnsiChar;
+begin
+  Value := 0.0;
+  AnsiStr := AnsiString(Str);// unicode -> ansi
+
+  dll_pure_parse_float(PAnsiChar(AnsiStr), @Value, @PEnd);
 
   Result := PEnd - PAnsiChar(AnsiStr);
 end;
@@ -159,6 +175,14 @@ var
 begin
   CountA := IeeeStringToDouble(S, A);
 
+  if @dll_pure_parse_float <> nil then
+  begin
+    CountB := PureStringToDoubleUserDll(S, B);
+    Assert(CountA = CountB);
+    Assert(ABin = BBin);
+    exit;
+  end;
+
   case Mode of
   ModePure:
     begin
@@ -202,6 +226,21 @@ var
   BBin: Int64 absolute B;
 begin
   IeeeStringToDouble(S, A);
+
+  if @dll_pure_parse_float <> nil then
+  begin
+    PureStringToDoubleUserDll(S, B);
+    if ABin = BBin then
+    begin
+      exit(udtSame);
+    end;
+    if (ABin - 1 = BBin) or (ABin + 1 = BBin) then
+    begin
+      exit(udtOne);
+    end;
+    exit(udtMoreThanOne);
+  end;
+
   case Mode of
   ModePure:
     begin
@@ -713,7 +752,7 @@ begin
     AnsiTestStrings := AnsiTestStrings + [AnsiString(S)];
   end;
 
-  Times := [0, 0, 0, 0, 0];
+  Times := [0, 0, 0, 0, 0, 0];
   for N := 0 to 400 - 1 do
   begin
     // netlib/David M. Gay
@@ -762,6 +801,17 @@ begin
       end;
       Times[4] := Times[4] + Int64(TThread.GetTickCount64() - Time);
     end;
+
+    // ParseFloat dll
+    if @dll_pure_parse_float <> nil then
+    begin
+      Time := TThread.GetTickCount64();
+      for I := 0 to High(AnsiTestStrings) do
+      begin
+        dll_pure_parse_float(PAnsiChar(AnsiTestStrings[I]), @D, @PAnsiEnd);
+      end;
+      Times[5] := Times[5] + Int64(TThread.GetTickCount64() - Time);
+    end;
   end;
 
   Writeln('Netlib strtod: ', Times[0], 'ms');
@@ -779,6 +829,10 @@ begin
       Writeln('  ', (Times[4] / Times[3]):0:2, 'x slower');
     end;
   end;
+  if @dll_pure_parse_float <> nil then
+  begin
+    Writeln('User DLL ParseFloat: ', Times[5], 'ms');
+  end;
 end;
 
 procedure DoRunTests();
@@ -787,8 +841,56 @@ var
   I: Integer;
   SuccessCount: Integer;
   CmdSize, CmdMode: UnicodeString;
+  DllName, DllFunctionName: UnicodeString;
 begin
   Writeln('=== PureFloatParser Test ===');
+
+  if FindCmdLineSwitch('dll') then
+  begin
+    if not FindCmdLineSwitch('function') then
+    begin
+      Writeln('Please use -function with -dll option!');
+      exit;
+    end;
+    // load dll
+    {$IFDEF FPC}
+    DllName := GetCmdLineArg('dll', ['-']);
+    {$ELSE}
+    DllName := '';
+    FindCmdLineSwitch('dll', DllName, True, [clstValueNextParam]);
+    {$ENDIF}
+    if DllName = '' then
+    begin
+      Writeln('Bad -dll param!');
+      exit;
+    end;
+    dll_pure_parse_float_library := LoadLibrary(PWideChar(DllName));
+    if pure_parse_float_library = 0 then
+    begin
+      Writeln('Can''t open "' + DllName + '" dll!');
+      exit;
+    end;
+    // load func
+    {$IFDEF FPC}
+    DllFunctionName := GetCmdLineArg('function', ['-']);
+    {$ELSE}
+    DllFunctionName := '';
+    FindCmdLineSwitch('function', DllFunctionName, True, [clstValueNextParam]);
+    {$ENDIF}
+    if DllFunctionName = '' then
+    begin
+      Writeln('Bad -function param!');
+      exit;
+    end;
+    @dll_pure_parse_float := GetProcAddress(dll_pure_parse_float_library, PWideChar(DllFunctionName));
+    if @dll_pure_parse_float = nil then
+    begin
+      Writeln('Can''t load function "' + DllFunctionName + '" from dll!');
+      exit;
+    end;
+    // print info
+    Writeln('*** Parser function "' + DllFunctionName + '", from user DLL "', DllName, '" ***');
+  end;
 
   if FindCmdLineSwitch('c') then
   begin
@@ -855,7 +957,8 @@ begin
       Writeln('Bad param parser!');
       exit;
     end;
-  end else
+  end
+  else if @dll_pure_parse_float = nil then
   begin
     Writeln('Use "-parser pure/delphi/microsoft" for change a parser under test.');
     Writeln('  Parser=Pure by default.');
@@ -867,21 +970,24 @@ begin
   else
     Writeln('  64 bit cpu');
 
-  case Mode of
-    ModePure: Writeln('  Parser=Pure');
-    ModeDelphi: Writeln('  Parser=Delphi');
-    ModeMicrosoft: Writeln('  Parser=Microsoft');
-  end;
+  if @dll_pure_parse_float = nil then
+  begin
+    case Mode of
+      ModePure: Writeln('  Parser=Pure');
+      ModeDelphi: Writeln('  Parser=Delphi');
+      ModeMicrosoft: Writeln('  Parser=Microsoft');
+    end;
+    if TestCVersion then
+    begin
+      Writeln('  Test C Version');
+    end;
+  end else
+    Writeln('  Parser=User DLL');
 
   case TestCount of
     SizeSmall: Writeln('  Size=Small');
     SizeMedium: Writeln('  Size=Medium');
     SizeLarge: Writeln('  Size=Large');
-  end;
-
-  if TestCVersion then
-  begin
-    Writeln('  Test C Version');
   end;
 
   Writeln;
@@ -971,6 +1077,7 @@ initialization
 
 finalization
   FreeLibrary(pure_parse_float_library);
+  FreeLibrary(dll_pure_parse_float_library);
 
 end.
 
