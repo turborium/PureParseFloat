@@ -4,13 +4,15 @@
 **The main feature of the algorithm that underlies this implementation is the trade-off between simplicity, accuracy, and speed.**
 
 **PureParseFloat** provides accurate conversion of numbers with a mantissa up to 31 digits, in the exponent range from -291 to +308, otherwise the conversion can have a maximum error of 1 ULP, which means that for most numbers encountered in practice the conversion will be absolutely accurate.
-In general, this implementation adheres to the idea of "a fairly good and at the same time simple floating point parser."
+In general, this implementation adheres to the idea of a "fairly good and at the same time simple floating point parser."
 
 There are two "reference" implementations available in this repository, for Pascal and C. Both implementations are covered with tests on millions of values, however the "main" implementation is the Pascal version.  
 
-Pascal version tested on Delphi and FreePascal, C version tested on TDM-GCC.  
+User ports in [```Ports/```](https://github.com/turborium/PureParseFloat/tree/main/Ports) dir.  
 
-Warning: the algorithm needs double aritmetic exactly matching the ieee standard, so before using the ParseFloat function, you must set the FPU precision to Double/64bit and rounding to Nearest. In ObjectPascal there are standard function for this, which are used by the Pascal reference implementation, but for C you need to do this yourself.  
+Pascal version was tested on Delphi and FreePascal, C version was tested on TDM-GCC.  
+
+Warning: the algorithm needs double aritmetic exactly matching the IEEE standard, so before using the ParseFloat function, you must set the FPU precision to Double/64bit and rounding to the closest. In ObjectPascal there are standard functions for this, which are used by the Pascal reference implementation, but for C you need to do this yourself.  
 
 # PureParseFloat [ru]
 
@@ -21,6 +23,8 @@ Warning: the algorithm needs double aritmetic exactly matching the ieee standard
 В целом эта реализация придерживается идеи "достаточно хороший и при этом простой парсер чисел с плавающей запятой".  
 
 В этом репозитории доступны две "референсные" реализации, для Pascal и C. Обе реализации покрыты тестами на миллионы значений, однако "главной" реализацией являеться Pascal версия.  
+
+Пользовательские порты в папке [```Ports/```](https://github.com/turborium/PureParseFloat/tree/main/Ports).  
 
 Pascal версия протестирована в Delphi и FreePascal, С версия протистирована в TDM-GCC.  
 
