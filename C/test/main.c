@@ -82,5 +82,5 @@ int main(int argc, char *argv[])
     printf("Fatal error count: %i\n", fatal_error_count);
     printf("One ulp error count: %i (%.3f%%)\n", one_ulp_error_count, 100.0 * ((double)one_ulp_error_count / (double)test_count));
         
-	return 0;
+    return 0;
 }
