@@ -8,6 +8,8 @@ In general, this implementation adheres to the idea of "a fairly good and at the
 
 There are two "reference" implementations available in this repository, for Pascal and C. Both implementations are covered with tests on millions of values, however the "main" implementation is the Pascal version.  
 
+User ports in [```Ports/```](https://github.com/turborium/PureParseFloat/tree/main/Ports) dir.  
+
 Pascal version tested on Delphi and FreePascal, C version tested on TDM-GCC.  
 
 Warning: the algorithm needs double aritmetic exactly matching the ieee standard, so before using the ParseFloat function, you must set the FPU precision to Double/64bit and rounding to Nearest. In ObjectPascal there are standard function for this, which are used by the Pascal reference implementation, but for C you need to do this yourself.  
@@ -21,6 +23,8 @@ Warning: the algorithm needs double aritmetic exactly matching the ieee standard
 В целом эта реализация придерживается идеи "достаточно хороший и при этом простой парсер чисел с плавающей запятой".  
 
 В этом репозитории доступны две "референсные" реализации, для Pascal и C. Обе реализации покрыты тестами на миллионы значений, однако "главной" реализацией являеться Pascal версия.  
+
+Пользовательские порты в папке [```Ports/```](https://github.com/turborium/PureParseFloat/tree/main/Ports).  
 
 Pascal версия протестирована в Delphi и FreePascal, С версия протистирована в TDM-GCC.  
 
