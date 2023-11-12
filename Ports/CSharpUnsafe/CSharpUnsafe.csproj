@@ -5,13 +5,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-	<PublishAot>true</PublishAot>
-	<IlcDisableReflection>true</IlcDisableReflection>
-	<RootAllApplicationAssemblies>false</RootAllApplicationAssemblies>
-	<IlcGenerateCompleteTypeMetadata>false</IlcGenerateCompleteTypeMetadata>
-	<IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
-	<IlcDisableUnhandledExceptionExperience>true</IlcDisableUnhandledExceptionExperience>
-	<IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+    <PublishAot>true</PublishAot>
+    <IlcDisableReflection>true</IlcDisableReflection>
+    <RootAllApplicationAssemblies>false</RootAllApplicationAssemblies>
+    <IlcGenerateCompleteTypeMetadata>false</IlcGenerateCompleteTypeMetadata>
+    <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <IlcDisableUnhandledExceptionExperience>true</IlcDisableUnhandledExceptionExperience>
+    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
   </PropertyGroup>
 
 </Project>
