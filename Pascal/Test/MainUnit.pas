@@ -166,7 +166,7 @@ begin
 end;
 {$R+} {$Q+}
 
-procedure AssertEqual(S: UnicodeString);
+procedure AssertEqual(S: UnicodeString; WarnPrint: Boolean = False);
 var
   A, B: Double;
   ABin: UInt64 absolute A;
@@ -178,7 +178,25 @@ begin
   if @dll_pure_parse_float <> nil then
   begin
     CountB := PureStringToDoubleUserDll(S, B);
+    if WarnPrint then
+    begin
+      if CountA <> CountB then
+      begin
+        Writeln('  Fail Length!');
+        Writeln('    String: "', S, '"');
+        Writeln('    Expected: ', CountA, ', Actual: ', CountB);
+      end;
+    end;
     Assert(CountA = CountB);
+    if WarnPrint then
+    begin
+      if ABin <> BBin then
+      begin
+        Writeln('  Fail Bin!');
+        Writeln('    String: "', S, '"');
+        Writeln('    Expected: 0x', IntToHex(ABin, 8), ', Actual: 0x', IntToHex(BBin, 8));
+      end;
+    end;
     Assert(ABin = BBin);
     exit;
   end;
@@ -213,6 +231,11 @@ begin
 
   // check equal numbers
   Assert(ABin = BBin);
+end;
+
+procedure AssertEqualWarn(S: UnicodeString);
+begin
+  AssertEqual(S, True);
 end;
 
 type
@@ -291,75 +314,75 @@ end;
 
 procedure SimpleIntegerTest();
 begin
-  AssertEqual('0');
-  AssertEqual('666999');
-  AssertEqual('+12345');
-  AssertEqual('100000000000000001');
-  AssertEqual('-329');
-  AssertEqual('00000000000004');
-  AssertEqual('-00000000000009');
-  AssertEqual('+00000000000009');
+  AssertEqualWarn('0');
+  AssertEqualWarn('666999');
+  AssertEqualWarn('+12345');
+  AssertEqualWarn('100000000000000001');
+  AssertEqualWarn('-329');
+  AssertEqualWarn('00000000000004');
+  AssertEqualWarn('-00000000000009');
+  AssertEqualWarn('+00000000000009');
 end;
 
 procedure SimpleFloatTest();
 begin
-  AssertEqual('0.0');
-  AssertEqual('10.2');
-  AssertEqual('-1.2');
-  AssertEqual('0.2');
+  AssertEqualWarn('0.0');
+  AssertEqualWarn('10.2');
+  AssertEqualWarn('-1.2');
+  AssertEqualWarn('0.2');
 end;
 
 procedure SimpleExponentTest();
 begin
-  AssertEqual('0.0e0');
-  AssertEqual('10.2e10');
-  AssertEqual('-1.2e99');
-  AssertEqual('0.2e-12');
+  AssertEqualWarn('0.0e0');
+  AssertEqualWarn('10.2e10');
+  AssertEqualWarn('-1.2e99');
+  AssertEqualWarn('0.2e-12');
 end;
 
 procedure SpecialStringTest();
 begin
-  AssertEqual('Nan');
-  AssertEqual('Inf');
-  AssertEqual('+Inf');
-  AssertEqual('-Inf');
-  AssertEqual('+Infinity');
-  AssertEqual('-Infinity');
-  AssertEqual('+Nan');
-  AssertEqual('-Nan');
+  AssertEqualWarn('Nan');
+  AssertEqualWarn('Inf');
+  AssertEqualWarn('+Inf');
+  AssertEqualWarn('-Inf');
+  AssertEqualWarn('+Infinity');
+  AssertEqualWarn('-Infinity');
+  AssertEqualWarn('+Nan');
+  AssertEqualWarn('-Nan');
 end;
 
 procedure HardParseTest();
 begin
-  AssertEqual('.e1');// not a number
-  AssertEqual('1.e1');
-  AssertEqual('.1');
-  AssertEqual('.1e000000000010');
-  AssertEqual('-.1e-000000000010');
-  AssertEqual('1.');
-  AssertEqual('2e.10');
-  AssertEqual('-0.00e-214');
-  AssertEqual('0e320');
-  AssertEqual('.123e10');
-  AssertEqual('123' + DupeString('0', 10000) + 'e-10000');// 123.0
-  AssertEqual('1234567891234567891234567891234' + DupeString('0', 10000) + 'e-10000');// 1234567891234567891234567891234.0
-  AssertEqual('-0.' + DupeString('0', 10000) + '9e10000');// -0.9
+  AssertEqualWarn('.e1');// not a number
+  AssertEqualWarn('1.e1');
+  AssertEqualWarn('.1');
+  AssertEqualWarn('.1e000000000010');
+  AssertEqualWarn('-.1e-000000000010');
+  AssertEqualWarn('1.');
+  AssertEqualWarn('2e.10');
+  AssertEqualWarn('-0.00e-214');
+  AssertEqualWarn('0e320');
+  AssertEqualWarn('.123e10');
+  AssertEqualWarn('123' + DupeString('0', 10000) + 'e-10000');// 123.0
+  AssertEqualWarn('1234567891234567891234567891234' + DupeString('0', 10000) + 'e-10000');// 1234567891234567891234567891234.0
+  AssertEqualWarn('-0.' + DupeString('0', 10000) + '9e10000');// -0.9
   // special values
-  AssertEqual('6.69692879491417e+299');
-  AssertEqual('3.7252902984619140625e-09');
-  AssertEqual('1.1754943508222875080e-38');
-  AssertEqual('1.4012984643248170709e-45');
-  AssertEqual('340282346638528859811704183484516925440.0');
-  AssertEqual('2.2250738585072013831e-308');
-  AssertEqual('4.9406564584124654418e-324');
-  AssertEqual('1.7976931348623157081e+308');
-  AssertEqual('1.8145860519450699870567321328132e-5');
-  AssertEqual('0.34657359027997265470861606072909');
+  AssertEqualWarn('6.69692879491417e+299');
+  AssertEqualWarn('3.7252902984619140625e-09');
+  AssertEqualWarn('1.1754943508222875080e-38');
+  AssertEqualWarn('1.4012984643248170709e-45');
+  AssertEqualWarn('340282346638528859811704183484516925440.0');
+  AssertEqualWarn('2.2250738585072013831e-308');
+  AssertEqualWarn('4.9406564584124654418e-324');
+  AssertEqualWarn('1.7976931348623157081e+308');
+  AssertEqualWarn('1.8145860519450699870567321328132e-5');
+  AssertEqualWarn('0.34657359027997265470861606072909');
   // inf
-  AssertEqual('1000000000000e307');// +inf
-  AssertEqual('-1000000000000e307');// -inf
+  AssertEqualWarn('1000000000000e307');// +inf
+  AssertEqualWarn('-1000000000000e307');// -inf
   // demo values
-  AssertEqual('18014398509481993');
+  AssertEqualWarn('18014398509481993');
 end;
 
 procedure RandomIntegerTest();
